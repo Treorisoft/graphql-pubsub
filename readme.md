@@ -6,6 +6,8 @@ The underlying iterable wasn't able to be modified for the necessary features th
 
 This re-implements the `withFilter`, while also providing some additional features, like a `withCancel` (an unsubscribe event), a `withInterval` to periodically repeat the last message sent over a subscription (in case of missed messages), and an `iteratorWithLast` feature to allow the client to supply the last id received, and for the server to respond to reconnects with missed messages.
 
+This uses `ioredis` for scalability, and uses redis streams and the message ids that redis generates for streams in order to work.
+
 ## Setup
 
 ### Client Setup
@@ -49,7 +51,15 @@ Next you need to setup your `PubSub` instance you would attach all the subscript
 ```ts
 import { PubSub } from '@treorisoft/graphql-pubsub';
 
-export const pubsub = new PubSub();
+export const pubsub = new PubSub({
+  redis: {
+    port: 6379,
+    host: '127.0.0.1',
+    username: 'default',
+    password: 'super-secret-pwd',
+    db: 0,
+  }
+});
 ```
 
 ## Usage
