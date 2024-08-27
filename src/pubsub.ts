@@ -122,22 +122,31 @@ export class PubSub<
     this.subToChannelMap.delete(id);
   }
 
-  public iteratorWithLast<T>(triggers: string | readonly string[], info: GraphQLResolveInfo): PubSubAsyncIterableIterator<T> {
+  public iteratorWithLast<T>(triggers: string | readonly string[], info: GraphQLResolveInfo, options: LastIteratorOptions = {}): PubSubAsyncIterableIterator<T> {
     const iterator = new PubSubAsyncIterableIterator<T>(this, triggers);
     const lastMessageId = getLastMessageId(info);
-    if (lastMessageId) {
+    if (lastMessageId || options.sendLatestOnNew) {
       const allTriggers = typeof triggers === 'string' ? [triggers] : triggers;
       const maybeNewerId = this.messageTracker.getLastId(allTriggers);
-      if (!!maybeNewerId && maybeNewerId > lastMessageId) {
+      if (!!maybeNewerId && ((!lastMessageId && options.sendLatestOnNew) || (!!lastMessageId && maybeNewerId > lastMessageId))) {
+        let replay_ids: string[] | undefined = undefined;
+        if (!!lastMessageId && options.replayMessages) {
+          replay_ids = this.messageTracker.getIdsAfter(allTriggers, lastMessageId);
+        }
         return wrapWithReplay(iterator, {
           redis: this.redis,
           stream_channel: this.config.stream_channel,
-          last_id: maybeNewerId
+          replay_ids: replay_ids?.length ? replay_ids : [maybeNewerId],
         });
       }
     }
     return iterator;
   }
+}
+
+export interface LastIteratorOptions {
+  sendLatestOnNew?: boolean
+  replayMessages?: boolean
 }
 
 type MapKey<T> = T extends Map<infer K, unknown> ? K : never;

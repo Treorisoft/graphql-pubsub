@@ -36,6 +36,24 @@ export class MessageTracker {
     return last_id;
   }
 
+  getIdsAfter(channels: readonly string[], last_id: string): string[] | undefined {
+    let newerIds: string[] = [];
+    channels.forEach(channel => {
+      const list = this.channelList[channel];
+      if (!list?.length) {
+        return;
+      }
+
+      const channelNewerIds = list.filter(msg => msg.message_id > last_id).map(msg => msg.message_id);
+      if (channelNewerIds.length) {
+        newerIds = newerIds.concat(channelNewerIds);
+      }
+    });
+
+    newerIds.sort();
+    return newerIds.length ? newerIds : undefined;
+  }
+
   async loadMessages(streamChannel: string) {
     const messageCount = await this.redis.publisher.xlen(streamChannel);
     if (!messageCount) {

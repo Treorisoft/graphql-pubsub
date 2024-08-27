@@ -132,7 +132,7 @@ export class PubSubAsyncIterableIterator<T> implements AsyncIterableIterator<T> 
 
 interface ReplayOptions {
   redis: RedisClient
-  last_id: string | null
+  replay_ids: string[] | null
   stream_channel: string
 }
 
@@ -152,20 +152,25 @@ export function wrapWithReplay<T>(iterator: PubSubAsyncIterableIterator<T>, opti
           return wrapWithReplay(theIterator, options);
         }
       }
-      else if (p === 'next' && options.last_id) {
+      else if (p === 'next' && options.replay_ids?.length) {
         return async function replayNext(): Promise<IteratorResult<T>> {
           let result: IteratorResult<T> | undefined;
-          const message = await options.redis.query(options.stream_channel, options.last_id!);
-          if (message) {
-            const { payload } = JSON.parse(message) as { payload: any };
-            result = {
-              done: false,
-              value: Object.assign(payload, {
-                extensions: { message_id: options.last_id }
-              })
-            };
+          let replay_id = options.replay_ids?.shift();
+          if (replay_id) {
+            const message = await options.redis.query(options.stream_channel, replay_id);
+            if (message) {
+              const { payload } = JSON.parse(message) as { payload: any };
+              result = {
+                done: false,
+                value: Object.assign(payload, {
+                  extensions: { message_id: options.replay_ids }
+                })
+              };
+            }
           }
-          options.last_id = null;
+          if (!options.replay_ids?.length) {
+            options.replay_ids = null;
+          }
           if (result) {
             return result;
           }
