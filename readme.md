@@ -136,22 +136,15 @@ const UserResolver = {
 
 ### iteratorWithLast
 
-> [!NOTE]
-> This is workable but incomplete - only part of the planned features are currently available.
-
 This works with the client setup and helps provide the latest data to the client upon reconnect.
 
 The basic concept is that a `message_id` is sent with every publish and the client side will keep track of the last id it received. When the connection is interrupted and it reconnects and re-establishes the subscription it passes that id back to the server. This function will read that and compare with the latest id actually available, and immediately send back to the client any messages it might have missed while disconnected.
 
-There are 2 modes this is planned to work with:
+This function takes 3 parameters, first the channel(s) to subscribe to, second the `info` object provided by the graphql resolver, and third an optional `options` parameter the defines how the send on resubscribe works.
 
-- `Send most recent only` - Upon reconnection if there is a newer message, send the most recent one containing the newest data.
-- `Replay` - Upon reconnection if there are newer message, send all the messages between the last id and up-to and including the newest.
-
-> [!NOTE]
-> `Replay` has NOT been implemented yet.
-
-`Replay` will be good for scenarios where the messages are compounded on each other - like chat messages. Where-as `Send most recent only` is good for scenarios where you want to deal with updates to data already on the page.
+Options are:
+- `sendLatestOnNew`: Optional boolean, defaults to `false`. When `true` during the subscribe, if no last id was past up (new subscription) then just immediately send the latest message.
+- `replayMessages`: Optional boolean, defaults to `false`. When `true` upon re-subscribe, it will replay all messages between the last id passed and the latest one. This good for scenarios where the messages are compounded on each other - like chat messages.
 
 Example:
 ```ts
@@ -159,7 +152,10 @@ const UserResolver = {
   Subscription: {
     userUpdated: {
       subscribe: (_, { user_id }, ctx, info) => {
-        return pubsub.iteratorWithLast('USER_UPDATED:' + user_id, info);
+        return pubsub.iteratorWithLast('USER_UPDATED:' + user_id, info, {
+          sendLatestOnNew: true,
+          replayMessages: true,
+        });
       }
     }
   }
