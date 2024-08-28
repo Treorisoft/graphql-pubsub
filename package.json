@@ -39,7 +39,8 @@
     "rimraf": "~5.0.5",
     "typescript": "~5.3.3",
     "@types/bluebird": "~3.5.42",
-    "yarpm": "~1.2.0"
+    "yarpm": "~1.2.0",
+    "ioredis": "~5.4.1"
   },
   "peerDependencies": {
     "graphql": "^15.7.2 || ^16.0.0",
