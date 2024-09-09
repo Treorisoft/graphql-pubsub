@@ -163,7 +163,7 @@ export function wrapWithReplay<T>(iterator: PubSubAsyncIterableIterator<T>, opti
               result = {
                 done: false,
                 value: Object.assign(payload, {
-                  extensions: { message_id: options.replay_ids }
+                  extensions: { message_id: replay_id }
                 })
               };
             }

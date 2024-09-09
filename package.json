@@ -1,6 +1,6 @@
 {
   "name": "@treorisoft/graphql-pubsub",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": false,
   "license": "MIT",
   "repository": "https://github.com/Treorisoft/graphql-pubsub",
