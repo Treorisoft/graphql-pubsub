@@ -1,12 +1,13 @@
 import { GraphQLResolveInfo } from 'graphql';
 import { PubSubAsyncIterableIterator, wrapWithReplay } from './pubsub-async-iterable-iterator';
 import { PubSubEngine } from './pubsub-engine';
-import type { PubSubConfig, PubSubOptions } from './types';
+import type { DeepPartial, PubSubConfig, PubSubOptions } from './types';
 import { getConfig } from './utils/getConfig';
 import { MessageTracker } from './utils/messageTracker';
 import type { RedisClient } from './utils/redis';
 import { map } from 'bluebird';
 import { getLastMessageId } from './utils/lastMessageId';
+import { mergeDeep } from './utils/mergeDeep';
 
 export type SubscriptionHandler = (...args: any[]) => void;
 
@@ -88,6 +89,48 @@ export class PubSub<
         await map(handlers, handler => handler.call(this, payload), { concurrency: this.config.concurrency });
       }
     }
+  }
+
+  /**
+   * Patches the most recently published data sent to a trigger.
+   * 
+   * By necessesity of using the last data, "global" is required
+   */
+  async patch<K extends keyof Events>(
+    triggerName: K & string,
+    payload: Events[K] extends never ? any : DeepPartial<Events[K]>,
+    getFirstData: (
+      triggerName: K & string,
+      payload: Events[K] extends never ? any : DeepPartial<Events[K]>
+    ) => Promise<Events[K] extends never ? any : Events[K]>,
+    customPatch?: (
+      existingData: Events[K] extends never ? any : Events[K],
+      payload: Events[K] extends never ? any : DeepPartial<Events[K]>
+    ) => Events[K] extends never ? any : Events[K]
+  ): Promise<void> {
+    let lastId = this.messageTracker.getLastId([triggerName]);
+    let lastData;
+
+    if (lastId) {
+      const message = await this.redis.query(this.config.stream_channel, lastId);
+      if (message) {
+        const { payload } = JSON.parse(message) as { payload: any };
+        lastData = payload;
+      }
+    }
+
+    if (!lastData) {
+      lastData = await getFirstData(triggerName, payload);
+    }
+
+    let newData = typeof customPatch === 'function'
+      ? customPatch(lastData, payload)
+      : mergeDeep(lastData, payload);
+
+    await this.redis.broadcast(
+      this.config.stream_channel,
+      JSON.stringify({ channel: triggerName, payload: newData })
+    );
   }
 
   async subscribe<K extends keyof Events>(triggerName: K & string, onMessage: SubscriptionHandler): Promise<number> {

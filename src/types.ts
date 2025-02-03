@@ -22,3 +22,7 @@ export interface RedisClientOptions {
 }
 
 export type CancelFn<T> = (value?: T) => void | Promise<void>
+
+export type DeepPartial<T> = T extends object ? {
+  [P in keyof T]?: DeepPartial<T[P]>;
+} : T;

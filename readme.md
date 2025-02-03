@@ -64,6 +64,47 @@ export const pubsub = new PubSub({
 
 ## Usage
 
+### publish
+
+Publishes data to the redis stream to be distributed to all listener and all subscribers.
+
+It takes 2 parameters with an optional 3rd.  The first the trigger/channel to publish to. The second parameter is the payload to send.  The third alters the behavior.  When `false` it skips sending the payload to redis, and just immediately publish the payload to the connected subscribes of the single instance.  `true` is the default.
+
+Example:
+```ts
+const SOMETHING_CHANGED_TOPIC = 'something_changed';
+const pubsub = new PubSub({
+  redis: { /* your redis config */ }
+});
+
+pubsub.publish(SOMETHING_CHANGED_TOPIC, {
+  somethingChanged: { /* match your schema */ }
+});
+```
+
+### patch
+
+Publishes data to the redis stream - but patches the last data sent.  Since it relies on the redis stream, patching is always considered a global publish.
+
+It takes 3 parameters with an optional 4th.  The first the trigger/channel to publish to.  The second is a partial payload to be merged with the most recent data.  The third is a generator function.  In the abscense initial data, the generator function is called, and the payload will be merged with the result. The fourth parameter is an optional function that can be used to provide custom patching when the default is not enough.  It receives both the inital data and the payload.
+
+By default, the merge is a deep merge - which merges same indexed elements of an array.
+
+Example:
+```ts
+const SOMETHING_CHANGED_TOPIC = 'something_changed';
+const pubsub = new PubSub({
+  redis: { /* your redis config */ }
+});
+
+pubsub.patch(SOMETHING_CHANGED_TOPIC, {
+  somethingChanged: { /* match your schema */ }
+}, async (triggerName, payload) => {
+  const data = await db.query('SELECT DATA');
+  return data;
+});
+```
+
 ### withFilter
 
 Returns a graphql field resolver function that will filter data to be sent over the subscription.
