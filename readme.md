@@ -86,9 +86,13 @@ pubsub.publish(SOMETHING_CHANGED_TOPIC, {
 
 Publishes data to the redis stream - but patches the last data sent.  Since it relies on the redis stream, patching is always considered a global publish.
 
-It takes 3 parameters with an optional 4th.  The first the trigger/channel to publish to.  The second is a partial payload to be merged with the most recent data.  The third is a generator function.  In the abscense initial data, the generator function is called, and the payload will be merged with the result. The fourth parameter is an optional function that can be used to provide custom patching when the default is not enough.  It receives both the inital data and the payload.
+It takes 3 parameters with an optional 4th.  The first the trigger/channel to publish to.  The second is a partial payload to be merged with the most recent data.  The third is a generator function.  In the abscense initial data, the generator function is called, and the payload will be merged with the result. The fourth parameter is extra options.
 
 By default, the merge is a deep merge - which merges same indexed elements of an array.
+
+Options:
+- `customPatch`: An optional function that can be used to provide custom patching when the default is not enough.  It receives both the inital data and the payload.
+- `preserveLastMessage`: By default a patch will remove the old message while adding the new message. This `boolean` allows you to preserve the original message in the redis stream.
 
 Example:
 ```ts

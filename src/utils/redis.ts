@@ -139,6 +139,10 @@ export class RedisClient {
     await this.publisher.xadd(channel, ...args, /* id */ '*', /* field */ 'channel_msg', /* value */ message);
   }
 
+  async xdel(channel: string, message_id: string) {
+    return await this.publisher.xdel(channel, message_id);
+  }
+
   async query(channel: string, id: string) {
     const cacheKey = `${channel}:${id}`;
     let result = QUERY_CACHE.get(cacheKey);

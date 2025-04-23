@@ -1,7 +1,7 @@
 import { GraphQLResolveInfo } from 'graphql';
 import { PubSubAsyncIterableIterator, wrapWithReplay } from './pubsub-async-iterable-iterator';
 import { PubSubEngine } from './pubsub-engine';
-import type { DeepPartial, PubSubConfig, PubSubOptions } from './types';
+import type { DeepPartial, PatchOptions, PubSubConfig, PubSubOptions } from './types';
 import { getConfig } from './utils/getConfig';
 import { MessageTracker } from './utils/messageTracker';
 import type { RedisClient } from './utils/redis';
@@ -103,19 +103,17 @@ export class PubSub<
       triggerName: K & string,
       payload: Events[K] extends never ? any : DeepPartial<Events[K]>
     ) => Promise<Events[K] extends never ? any : Events[K]>,
-    customPatch?: (
-      existingData: Events[K] extends never ? any : Events[K],
-      payload: Events[K] extends never ? any : DeepPartial<Events[K]>
-    ) => Events[K] extends never ? any : Events[K]
+    options?: PatchOptions<Events, K>
   ): Promise<void> {
     let lastId = this.messageTracker.getLastId([triggerName]);
-    let lastData;
+    let lastData, foundRedisData = false;
 
     if (lastId) {
       const message = await this.redis.query(this.config.stream_channel, lastId);
       if (message) {
         const { payload } = JSON.parse(message) as { payload: any };
         lastData = payload;
+        foundRedisData = true;
       }
     }
 
@@ -123,14 +121,18 @@ export class PubSub<
       lastData = await getFirstData(triggerName, payload);
     }
 
-    let newData = typeof customPatch === 'function'
-      ? customPatch(lastData, payload)
+    let newData = typeof options?.customPatch === 'function'
+      ? options.customPatch(lastData, payload)
       : mergeDeep(lastData, payload);
 
     await this.redis.broadcast(
       this.config.stream_channel,
       JSON.stringify({ channel: triggerName, payload: newData })
     );
+
+    if (lastId && foundRedisData && !options?.preserveLastMessage) {
+      await this.redis.xdel(this.config.stream_channel, lastId);
+    }
   }
 
   async subscribe<K extends keyof Events>(triggerName: K & string, onMessage: SubscriptionHandler): Promise<number> {

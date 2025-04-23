@@ -26,3 +26,11 @@ export type CancelFn<T> = (value?: T) => void | Promise<void>
 export type DeepPartial<T> = T extends object ? {
   [P in keyof T]?: DeepPartial<T[P]>;
 } : T;
+
+export interface PatchOptions<Events extends { [event: string]: unknown }, K extends keyof Events> {
+  preserveLastMessage?: boolean
+  customPatch?: (
+    existingData: Events[K] extends never ? any : Events[K],
+    payload: Events[K] extends never ? any : DeepPartial<Events[K]>
+  ) => Events[K] extends never ? any : Events[K]
+}
