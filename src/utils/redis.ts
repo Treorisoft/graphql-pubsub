@@ -139,8 +139,19 @@ export class RedisClient {
     await this.publisher.xadd(channel, ...args, /* id */ '*', /* field */ 'channel_msg', /* value */ message);
   }
 
-  async xdel(channel: string, message_id: string) {
-    return await this.publisher.xdel(channel, message_id);
+  async replaceBroadcast(channel: string, message_id: string, message: string) {
+    const args = ['MAXLEN', '~', this.config.maxStreamLength];
+    return new Promise<void>((resolve, reject) => {
+      this.publisher.multi()
+        .xdel(channel, message_id)
+        .xadd(channel, ...args, /* id */ '*', /* field */ 'channel_msg', /* value */ message)
+        .exec((err, _results) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
+    });
   }
 
   async query(channel: string, id: string) {

@@ -96,6 +96,37 @@ export class MessageTracker {
     this.masterList.push(msg);
   }
 
+  remove(channel: string, message_id: string) {
+    const masterIndex = this.masterList.findIndex(msg => msg.message_id == message_id);
+    if (masterIndex < 0) {
+      return null;
+    }
+
+    const msg = this.masterList[masterIndex];
+    let channelIndex: number = -1;
+    if (this.channelList[channel]) {
+      channelIndex = this.channelList[channel].indexOf(msg);
+      if (channelIndex >= 0) {
+        this.channelList[channel].splice(channelIndex, 1);
+      }
+    }
+    this.masterList.splice(masterIndex, 1);
+    return { msg, channelIndex, masterIndex };
+  }
+
+  restore(removedMessage: Exclude<ReturnType<MessageTracker['remove']>, null>) {
+    if (!removedMessage) {
+      return;
+    }
+
+    if (removedMessage.channelIndex >= 0) {
+      this.channelList[removedMessage.msg.channel].splice(removedMessage.channelIndex, 0, removedMessage.msg);
+    }
+    if (removedMessage.masterIndex >= 0) {
+      this.masterList.splice(removedMessage.masterIndex, 0, removedMessage.msg);
+    }
+  }
+
   removeLast() {
     const msg = this.masterList.shift(); // remove first element
     if (msg) {

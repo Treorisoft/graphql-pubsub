@@ -125,13 +125,26 @@ export class PubSub<
       ? options.customPatch(lastData, payload)
       : mergeDeep(lastData, payload);
 
-    await this.redis.broadcast(
-      this.config.stream_channel,
-      JSON.stringify({ channel: triggerName, payload: newData })
-    );
-
     if (lastId && foundRedisData && !options?.preserveLastMessage) {
-      await this.redis.xdel(this.config.stream_channel, lastId);
+      const removed = this.messageTracker.remove(triggerName, lastId);
+      try {
+        await this.redis.replaceBroadcast(
+          this.config.stream_channel,
+          lastId,
+          JSON.stringify({ channel: triggerName, payload: newData })
+        );
+      }
+      catch (err) {
+        if (removed) {
+          this.messageTracker.restore(removed);
+        }
+        throw err;
+      }
+    } else {
+      await this.redis.broadcast(
+        this.config.stream_channel,
+        JSON.stringify({ channel: triggerName, payload: newData })
+      );
     }
   }
 
