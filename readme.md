@@ -206,3 +206,34 @@ const UserResolver = {
   }
 }
 ```
+
+### primeChannelData
+
+This function help to prime a trigger/channel with data.  It takes 2 parameters, the channel and an initializer function to get the data. Only if there is not data already on the channel is the initializer called and then silently - without publishing to _everyone_ puts data onto the channel (because likely no-one has been listening to the channel).
+
+Once primed when subscribed with `iteratorWithLast` using `sendLatestOnNew`, this data will be sent to the person subscribing - and be ready for the next subscribers too.
+
+Example:
+```ts
+const UserResolver = {
+  Subscription: {
+    userUpdated: {
+      subscribe: async (_, { user_id }, ctx, info) => {
+        const CHANNEL_KEY = 'USER_UPDATED:' + user_id;
+        await pubsub.primeChannelData(CHANNEL_KEY, async () => {
+          // run database call, and other logic
+          return {
+            userUpdated: {
+              first_name: 'John',
+              last_name: 'Doe',
+              email: 'john@doe.test',
+            }
+          }
+        });
+
+        return pubsub.iteratorWithLast(CHANNEL_KEY, info, { sendLatestOnNew: true });
+      }
+    }
+  }
+}
+```

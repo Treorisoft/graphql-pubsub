@@ -63,8 +63,12 @@ export class PubSub<
 
   async onMessage(message_id: string, message: string) {
     try {
-      const { channel, payload } = JSON.parse(message) as {channel: string, payload: any };
+      const { channel, payload, silent } = JSON.parse(message) as {channel: string, payload: any, silent?: boolean };
       this.messageTracker.add(channel, message_id);
+      if (silent) {
+        // If the message is silent, we don't want to notify subscribers
+        return;
+      }
       this.publish(channel, Object.assign(payload, {
         extensions: { message_id }
       }), false);
@@ -89,6 +93,21 @@ export class PubSub<
         await map(handlers, handler => handler.call(this, payload), { concurrency: this.config.concurrency });
       }
     }
+  }
+
+  async primeChannelData<K extends keyof Events>(
+    triggerName: K & string,
+    initializer: () => Promise<Events[K] extends never ? any : Events[K]>
+  ): Promise<void> {
+    if (!!this.messageTracker.getLastId([triggerName])) {
+      return Promise.resolve();
+    }
+
+    const payload = await initializer();
+    await this.redis.broadcast(
+      this.config.stream_channel,
+      JSON.stringify({ channel: triggerName, payload, silent: true })
+    );
   }
 
   /**
