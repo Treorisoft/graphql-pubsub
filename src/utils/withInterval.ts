@@ -44,8 +44,8 @@ function getValueCollector<T>(asyncIterator: PubSubAsyncIterableIterator<T>, cb:
 }
 
 function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, { interval = 10000, onCancel, perIterator }: IntervalOptions<T> = {}) {
-  const eventArray = asyncIterator.eventsArray;
-  const pubsub: PubSub = asyncIterator.pubsub as PubSub;
+  const eventArray = asyncIterator.eventNames;
+  const pubsub: PubSub = asyncIterator.pubsubEngine as PubSub;
 
   if (!!perIterator) {
     let intervalId: NodeJS.Timeout;
