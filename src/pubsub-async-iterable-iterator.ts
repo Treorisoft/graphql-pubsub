@@ -38,10 +38,10 @@ export class PubSubAsyncIterableIterator<T> implements AsyncIterableIterator<T> 
 
   private pullQueue: ((value: IteratorResult<T>) => void)[];
   private pushQueue: T[];
-  private eventsArray: readonly string[];
+  eventsArray: readonly string[];
   private allSubscribed: Promise<number[]> | null;
   private running: boolean;
-  private pubsub: PubSubEngine;
+  pubsub: PubSubEngine;
 
   constructor(pubsub: PubSubEngine, eventNames: string | readonly string[]) {
     this.pubsub = pubsub;

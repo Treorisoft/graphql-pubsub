@@ -219,6 +219,25 @@ export class PubSub<
     }
     return iterator;
   }
+
+  public async getLastMessage(triggers: string | readonly string[]) {
+    const allTriggers = typeof triggers === 'string' ? [triggers] : triggers;
+    const lastMessageId = this.messageTracker.getLastId(allTriggers);
+    if (!lastMessageId) {
+      return undefined;
+    }
+
+    try {
+      const message = await this.redis.query(this.config.stream_channel, lastMessageId);
+      if (message) {
+        const { payload } = JSON.parse(message) as { payload: any };
+        return Object.assign(payload, {
+          extensions: { message_id: lastMessageId }
+        });
+      }
+    }
+    catch {}
+  }
 }
 
 export interface LastIteratorOptions {
