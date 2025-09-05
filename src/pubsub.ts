@@ -236,7 +236,11 @@ export class PubSub<
         });
       }
     }
-    catch {}
+    catch {
+      // either errored because the message couldn't be retrieved, or unable to parse
+      // in either case, just handle it silently and return undefined
+      return undefined;
+    }
   }
 }
 

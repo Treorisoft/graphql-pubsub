@@ -80,7 +80,6 @@ function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, {
             if (!lastResult) {
               // preload the first value from redis (if it exists)
               const preloadedMessage = await pubsub.getLastMessage(eventArray);
-              console.log('preloadedMessage (per)', preloadedMessage);
               if (preloadedMessage) {
                 lastResult = {
                   done: false,
@@ -128,7 +127,6 @@ function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, {
     (async function collectNextValue() {
       // preload the iterator to get the next value
       const preloadedMessage = await pubsub.getLastMessage(eventArray);
-      console.log('preloadedMessage', preloadedMessage);
       if (preloadedMessage) {
         data.last_message = {
           done: false,
