@@ -1,3 +1,4 @@
+import type { PubSub } from "../pubsub";
 import type { PubSubAsyncIterableIterator } from "../pubsub-async-iterable-iterator";
 import type { CancelFn } from "../types";
 import { getProxyMethod } from "./getProxyMethod";
@@ -43,6 +44,9 @@ function getValueCollector<T>(asyncIterator: PubSubAsyncIterableIterator<T>, cb:
 }
 
 function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, { interval = 10000, onCancel, perIterator }: IntervalOptions<T> = {}) {
+  const eventArray = asyncIterator.eventNames;
+  const pubsub: PubSub = asyncIterator.pubsubEngine as PubSub;
+
   if (!!perIterator) {
     let intervalId: NodeJS.Timeout;
     let lastResult: IteratorResult<T>;
@@ -73,6 +77,17 @@ function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, {
         }
         else if (prop === 'next') {
           return async function collectNextValue(): Promise<IteratorResult<T>> {
+            if (!lastResult) {
+              // preload the first value from redis (if it exists)
+              const preloadedMessage = await pubsub.getLastMessage(eventArray);
+              if (preloadedMessage) {
+                lastResult = {
+                  done: false,
+                  value: preloadedMessage
+                };
+              }
+            }
+            // get the next value - while this waits, the preloaded value may be sent out on the interval
             lastResult = await Reflect.apply(existingValue, target, []);
             return lastResult;
           }
@@ -110,6 +125,15 @@ function getIteratorInterval<T>(asyncIterator: PubSubAsyncIterableIterator<T>, {
     })();
 
     (async function collectNextValue() {
+      // preload the iterator to get the next value
+      const preloadedMessage = await pubsub.getLastMessage(eventArray);
+      if (preloadedMessage) {
+        data.last_message = {
+          done: false,
+          value: preloadedMessage
+        };
+      }
+
       do {
         await data.main?.next();
       } while(!!data.main);

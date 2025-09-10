@@ -52,6 +52,14 @@ export class PubSubAsyncIterableIterator<T> implements AsyncIterableIterator<T> 
     this.eventsArray = typeof eventNames === 'string' ? [eventNames] : eventNames;
   }
 
+  public get eventNames(): readonly string[] {
+    return structuredClone(this.eventsArray);
+  }
+
+  public get pubsubEngine(): PubSubEngine {
+    return this.pubsub;
+  }
+
   public clone() {
     return new PubSubAsyncIterableIterator(this.pubsub, this.eventsArray);
   }

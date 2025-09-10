@@ -219,6 +219,29 @@ export class PubSub<
     }
     return iterator;
   }
+
+  public async getLastMessage(triggers: string | readonly string[]) {
+    const allTriggers = typeof triggers === 'string' ? [triggers] : triggers;
+    const lastMessageId = this.messageTracker.getLastId(allTriggers);
+    if (!lastMessageId) {
+      return undefined;
+    }
+
+    try {
+      const message = await this.redis.query(this.config.stream_channel, lastMessageId);
+      if (message) {
+        const { payload } = JSON.parse(message) as { payload: any };
+        return Object.assign(payload, {
+          extensions: { message_id: lastMessageId }
+        });
+      }
+    }
+    catch {
+      // either errored because the message couldn't be retrieved, or unable to parse
+      // in either case, just handle it silently and return undefined
+      return undefined;
+    }
+  }
 }
 
 export interface LastIteratorOptions {
