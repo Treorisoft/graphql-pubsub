@@ -22,6 +22,7 @@ export class PubSub<
   private subscriptions: Map<string, Map<number, SubscriptionHandler>> = new Map();
   private subToChannelMap: Map<number, string> = new Map();
   private subIdCounter: number;
+  private primeChannelResolvers: Map<string, (value: void | PromiseLike<void>) => void> = new Map();
 
   private config: PubSubConfig;
   private redis: RedisClient;
@@ -67,6 +68,11 @@ export class PubSub<
       this.messageTracker.add(channel, message_id);
       if (silent) {
         // If the message is silent, we don't want to notify subscribers
+        const resolver = this.primeChannelResolvers.get(channel);
+        if (resolver) {
+          resolver();
+          this.primeChannelResolvers.delete(channel);
+        }
         return;
       }
       this.publish(channel, Object.assign(payload, {
@@ -103,11 +109,13 @@ export class PubSub<
       return Promise.resolve();
     }
 
+    const primeCompleted = new Promise<void>((resolver) => { this.primeChannelResolvers.set(triggerName, resolver); });
     const payload = await initializer();
     await this.redis.broadcast(
       this.config.stream_channel,
       JSON.stringify({ channel: triggerName, payload, silent: true })
     );
+    await primeCompleted;
   }
 
   /**
