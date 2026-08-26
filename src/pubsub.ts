@@ -4,7 +4,7 @@ import { PubSubEngine } from './pubsub-engine';
 import type { DeepPartial, PatchOptions, PubSubConfig, PubSubOptions } from './types';
 import { getConfig } from './utils/getConfig';
 import { MessageTracker } from './utils/messageTracker';
-import type { RedisClient } from './utils/redis';
+import type { JSONObject, JSONValue, RedisClient } from './utils/redis';
 import { map } from 'bluebird';
 import { getLastMessageId } from './utils/lastMessageId';
 import { mergeDeep } from './utils/mergeDeep';
@@ -101,10 +101,18 @@ export class PubSub<
     }
   }
 
+  /**
+   * @deprecated Use `iteratorWithLast` instead, with the `sendLatestOnNew` callback option to get the latest message if needed.
+   */
   async primeChannelData<K extends keyof Events>(
     triggerName: K & string,
     initializer: () => Promise<Events[K] extends never ? any : Events[K]>
   ): Promise<void> {
+    process.emitWarning(
+      'PubSub.primeChannelData is deprecated. Use PubSub.iteratorWithLast with the sendLatestOnNew callback option instead.',
+      'DeprecationWarning',
+      'DEPRECATION_PUBSUB_PRIME_CHANNEL_DATA'
+    );
     if (!!this.messageTracker.getLastId([triggerName])) {
       return Promise.resolve();
     }
@@ -207,7 +215,7 @@ export class PubSub<
     this.subToChannelMap.delete(id);
   }
 
-  public iteratorWithLast<T>(triggers: string | readonly string[], info: GraphQLResolveInfo, options: LastIteratorOptions = {}): PubSubAsyncIterableIterator<T> {
+  public iteratorWithLast<T extends JSONValue>(triggers: string | readonly string[], info: GraphQLResolveInfo, options: LastIteratorOptions<T> = {}): PubSubAsyncIterableIterator<T> {
     const iterator = new PubSubAsyncIterableIterator<T>(this, triggers);
     const lastMessageId = getLastMessageId(info);
     if (lastMessageId || options.sendLatestOnNew) {
@@ -223,6 +231,43 @@ export class PubSub<
           stream_channel: this.config.stream_channel,
           replay_ids: replay_ids?.length ? replay_ids : [maybeNewerId],
         });
+      }
+      else if (!maybeNewerId && typeof options.sendLatestOnNew === 'object' && typeof options.sendLatestOnNew.callback === 'function') {
+        const triggerName = options.sendLatestOnNew.triggerName ?? (typeof triggers === 'string' ? triggers : triggers[0]);
+        if (!triggerName || !allTriggers.includes(triggerName)) {
+          console.warn(`sendLatestOnNew callback specified, but triggerName is not provided or not included in triggers. Callback will not be called.`);
+        }
+        else {
+          this.redis.joinInFlight({
+            key: `${this.config.stream_channel}_locks:sendLatestOnNew:${triggerName}`,
+            timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
+            callback: options.sendLatestOnNew.callback,
+            firstRunnerCallback: async (result) => {
+              if (typeof result !== 'object' || result == null) {
+                return result;
+              }
+
+              // prime the channel with the latest message, so that any other subscribers will get it as well
+              const messageId = await this.redis.broadcast(
+                this.config.stream_channel,
+                JSON.stringify({ channel: triggerName, payload: result, silent: true })
+              );
+
+              // yes result is expected to be an object, and Object.assign mutates result
+              Object.assign(result as JSONObject, {
+                extensions: { message_id: messageId }
+              });
+              return result;
+            }
+          })
+          .then(result => {
+            // push the message to this iterator, so that the subscriber will get it immediately
+            iterator.pushValue(result.result);
+          })
+          .catch(err => {
+            console.error('Error in sendLatestOnNew callback:', err);
+          });
+        }
       }
     }
     return iterator;
@@ -252,9 +297,15 @@ export class PubSub<
   }
 }
 
-export interface LastIteratorOptions {
-  sendLatestOnNew?: boolean
+export interface LastIteratorOptions<T extends JSONValue> {
+  sendLatestOnNew?: boolean | LatestMessageOptions<T>
   replayMessages?: boolean
+}
+
+interface LatestMessageOptions<T extends JSONValue> {
+  callback: (signal: AbortSignal) => T | Promise<T> // considered ability to extend timeout, but other waiting subscribers will also be waiting, and wouldn't be able to extend their timeout
+  timeout?: number
+  triggerName?: string
 }
 
 type MapKey<T> = T extends Map<infer K, unknown> ? K : never;
