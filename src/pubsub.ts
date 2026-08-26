@@ -232,12 +232,12 @@ export class PubSub<
           replay_ids: replay_ids?.length ? replay_ids : [maybeNewerId],
         });
       }
-      else if (!maybeNewerId && options.sendLatestOnNew && typeof options.getLatestMessage?.callback === 'function') {
-        const triggerName = options.getLatestMessage.triggerName ?? (typeof triggers === 'string' ? triggers : triggers[0]);
+      else if (!maybeNewerId && typeof options.sendLatestOnNew === 'object' && typeof options.sendLatestOnNew.callback === 'function') {
+        const triggerName = options.sendLatestOnNew.triggerName ?? (typeof triggers === 'string' ? triggers : triggers[0]);
         this.redis.joinInFlight({
           key: `pubsub:getLatestMessage:${triggerName}`,
-          timeout: options.getLatestMessage.timeout ?? 30_000, // 30s default timeout
-          callback: options.getLatestMessage.callback
+          timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
+          callback: options.sendLatestOnNew.callback
         })
         .then(result => {
           if (result.wasFirst) {
@@ -280,13 +280,12 @@ export class PubSub<
 }
 
 export interface LastIteratorOptions<T extends JSONValue> {
-  sendLatestOnNew?: boolean
+  sendLatestOnNew?: boolean | LatestMessageOptions<T>
   replayMessages?: boolean
-  getLatestMessage?: LatestMessageOptions<T>
 }
 
 interface LatestMessageOptions<T extends JSONValue> {
-  callback: (signal: AbortSignal) => T | Promise<T>
+  callback: (signal: AbortSignal) => T | Promise<T> // considered ability to extend timeout, but other waiting subscribers will also be waiting, and wouldn't be able to extend their timeout
   timeout?: number
   triggerName?: string
 }
