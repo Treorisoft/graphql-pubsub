@@ -191,7 +191,7 @@ The basic concept is that a `message_id` is sent with every publish and the clie
 This function takes 3 parameters, first the channel(s) to subscribe to, second the `info` object provided by the graphql resolver, and third an optional `options` parameter the defines how the send on resubscribe works.
 
 Options are:
-- `sendLatestOnNew`: Optional boolean | object, defaults to `false`. When `true` during the subscribe, if no last id was past up (new subscription) then just immediately send the latest message.
+- `sendLatestOnNew`: Optional boolean | object, defaults to `false`. When `true` during the subscribe, if no last id was passed in (new subscription) then just immediately send the latest message.
 - `replayMessages`: Optional boolean, defaults to `false`. When `true` upon re-subscribe, it will replay all messages between the last id passed and the latest one. This good for scenarios where the messages are compounded on each other - like chat messages.
 
 Example:
