@@ -234,31 +234,40 @@ export class PubSub<
       }
       else if (!maybeNewerId && typeof options.sendLatestOnNew === 'object' && typeof options.sendLatestOnNew.callback === 'function') {
         const triggerName = options.sendLatestOnNew.triggerName ?? (typeof triggers === 'string' ? triggers : triggers[0]);
-        this.redis.joinInFlight({
-          key: `pubsub:sendLatestOnNew:${triggerName}`,
-          timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
-          callback: options.sendLatestOnNew.callback,
-          firstRunnerCallback: async (result) => {
-            // prime the channel with the latest message, so that any other subscribers will get it as well
-            const messageId = await this.redis.broadcast(
-              this.config.stream_channel,
-              JSON.stringify({ channel: triggerName, payload: result, silent: true })
-            );
+        if (!triggerName || !allTriggers.includes(triggerName)) {
+          console.warn(`sendLatestOnNew callback specified, but triggerName is not provided or not included in triggers. Callback will not be called.`);
+        }
+        else {
+          this.redis.joinInFlight({
+            key: `${this.config.stream_channel}_locks:sendLatestOnNew:${triggerName}`,
+            timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
+            callback: options.sendLatestOnNew.callback,
+            firstRunnerCallback: async (result) => {
+              if (typeof result !== 'object' || result == null) {
+                return result;
+              }
 
-            // yes result is expected to be an object, and Object.assign mutates result
-            Object.assign(result as JSONObject, {
-              extensions: { message_id: messageId }
-            });
-            return result;
-          }
-        })
-        .then(result => {
-          // push the message to this iterator, so that the subscriber will get it immediately
-          iterator.pushValue(result.result);
-        })
-        .catch(err => {
-          console.error('Error in sendLatestOnNew callback:', err);
-        });
+              // prime the channel with the latest message, so that any other subscribers will get it as well
+              const messageId = await this.redis.broadcast(
+                this.config.stream_channel,
+                JSON.stringify({ channel: triggerName, payload: result, silent: true })
+              );
+
+              // yes result is expected to be an object, and Object.assign mutates result
+              Object.assign(result as JSONObject, {
+                extensions: { message_id: messageId }
+              });
+              return result;
+            }
+          })
+          .then(result => {
+            // push the message to this iterator, so that the subscriber will get it immediately
+            iterator.pushValue(result.result);
+          })
+          .catch(err => {
+            console.error('Error in sendLatestOnNew callback:', err);
+          });
+        }
       }
     }
     return iterator;
