@@ -102,14 +102,14 @@ export class PubSub<
   }
 
   /**
-   * @deprecated Use `iteratorWithLast` instead, with the `getLatestMessage` option to get the latest message if needed.
+   * @deprecated Use `iteratorWithLast` instead, with the `sendLatestOnNew` callback option to get the latest message if needed.
    */
   async primeChannelData<K extends keyof Events>(
     triggerName: K & string,
     initializer: () => Promise<Events[K] extends never ? any : Events[K]>
   ): Promise<void> {
     process.emitWarning(
-      'PubSub.primeChannelData is deprecated. Use PubSub.iteratorWithLast with the getLatestMessage option instead.',
+      'PubSub.primeChannelData is deprecated. Use PubSub.iteratorWithLast with the sendLatestOnNew callback option instead.',
       'DeprecationWarning',
       'DEPRECATION_PUBSUB_PRIME_CHANNEL_DATA'
     );
@@ -235,7 +235,7 @@ export class PubSub<
       else if (!maybeNewerId && typeof options.sendLatestOnNew === 'object' && typeof options.sendLatestOnNew.callback === 'function') {
         const triggerName = options.sendLatestOnNew.triggerName ?? (typeof triggers === 'string' ? triggers : triggers[0]);
         this.redis.joinInFlight({
-          key: `pubsub:getLatestMessage:${triggerName}`,
+          key: `pubsub:sendLatestOnNew:${triggerName}`,
           timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
           callback: options.sendLatestOnNew.callback
         })
@@ -249,6 +249,9 @@ export class PubSub<
           }
           // also push the latest message to this iterator, so that the subscriber will get it immediately
           iterator.pushValue(result.result);
+        })
+        .catch(err => {
+          console.error('Error in sendLatestOnNew callback:', err);
         });
       }
     }

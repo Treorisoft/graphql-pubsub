@@ -8,6 +8,9 @@ This re-implements the `withFilter`, while also providing some additional featur
 
 This uses `ioredis` for scalability, and uses redis streams and the message ids that redis generates for streams in order to work.
 
+> [!NOTE]
+> Redis version 7 is required to use the `sendLatestOnNew` callback feature.
+
 ## Setup
 
 ### Client Setup
@@ -207,7 +210,7 @@ const UserResolver = {
 }
 ```
 
-When `sendLatestOnNew` options is an `object` it is meant for priming the channel data so there is always a something new to send. It takes a `callback` and optional `timeout` (default `30s`) and `triggerName` (defaults to first channel to susbscribe to).
+When `sendLatestOnNew` is an object, it primes the channel data so there is always something new to send. It takes a `callback`, an optional `timeout` (default `30s`), and an optional `triggerName` (defaults to the first channel subscribed to).
 
 The callback uses redis to ensure the same channel only has 1 in-flight priming callback running at a time.
 
