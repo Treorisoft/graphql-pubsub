@@ -266,12 +266,13 @@ export class RedisClient {
       if (runnerId === instanceId) {
         // we are the first to set the value, so we can run the callback and set the result
         try {
-          const serializedResult = JSON.stringify({ok: true, value: await callback(abortSignal)});
-          const parsedResult = JSON.parse(serializedResult) as {ok: true, value: T};
-          result = parsedResult.value;
+          let callbackResult = await callback(abortSignal);
           if (typeof firstRunnerCallback === 'function') {
-            result = await firstRunnerCallback(result);
+            callbackResult = await firstRunnerCallback(callbackResult);
           }
+          const serializedResult = JSON.stringify({ ok: true, value: callbackResult });
+          const parsedResult = JSON.parse(serializedResult) as { ok: true, value: T };
+          result = parsedResult.value;
           await this.broadcast(streamKey, serializedResult);
         }
         catch (err) {
