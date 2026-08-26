@@ -76,7 +76,7 @@ export class RedisClient {
   }
 
   async del_if(key: RedisKey, value: RedisValue) {
-    this.publisher.del_if(key, value);
+    return this.publisher.del_if(key, value);
   }
 
   private clearStreamListenerTimeout() {
