@@ -201,9 +201,10 @@ export class RedisClient {
     }
   }
 
-  async broadcast(channel: string, message: string) {
+  async broadcast(channel: string, message: string): Promise<string> {
     const args = ['MAXLEN', '~', this.config.maxStreamLength];
-    await this.publisher.xadd(channel, ...args, /* id */ '*', /* field */ 'channel_msg', /* value */ message);
+    const id = await this.publisher.xadd(channel, ...args, /* id */ '*', /* field */ 'channel_msg', /* value */ message) as string;
+    return id;
   }
 
   async replaceBroadcast(channel: string, message_id: string, message: string) {
@@ -254,7 +255,7 @@ export class RedisClient {
     return null;
   }
 
-  async joinInFlight<T extends JSONValue>({ key, callback, timeout }: JoinInFlightOptions<T>): Promise<InFlightResponse<T>> {
+  async joinInFlight<T extends JSONValue>({ key, callback, timeout, firstRunnerCallback }: JoinInFlightOptions<T>): Promise<InFlightResponse<T>> {
     const cacheKey = `inflight:${key}`;
     const instanceId = randomUUID();
     let result: T | null = null;
@@ -268,6 +269,9 @@ export class RedisClient {
           const serializedResult = JSON.stringify({ok: true, value: await callback(abortSignal)});
           const parsedResult = JSON.parse(serializedResult) as {ok: true, value: T};
           result = parsedResult.value;
+          if (typeof firstRunnerCallback === 'function') {
+            result = await firstRunnerCallback(result);
+          }
           await this.broadcast(streamKey, serializedResult);
         }
         catch (err) {
@@ -294,10 +298,12 @@ export class RedisClient {
 export type InFlightCallback<T extends JSONValue> = (signal: AbortSignal) => T | Promise<T>;
 type JSONPrimitive = string | number | boolean | null | undefined;
 export type JSONValue = JSONPrimitive | JSONValue[] | { toJSON: () => any } | { [key: string]: JSONValue };
+export type JSONObject = { toJSON: () => any } | { [key: string]: JSONValue };
 export interface JoinInFlightOptions<T extends JSONValue> {
   key: string
   callback: InFlightCallback<T>
   timeout: number // in milliseconds
+  firstRunnerCallback?: (result: T) => Promise<T>
 }
 
 export interface InFlightResponse<T extends JSONValue> {

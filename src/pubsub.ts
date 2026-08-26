@@ -4,7 +4,7 @@ import { PubSubEngine } from './pubsub-engine';
 import type { DeepPartial, PatchOptions, PubSubConfig, PubSubOptions } from './types';
 import { getConfig } from './utils/getConfig';
 import { MessageTracker } from './utils/messageTracker';
-import type { JSONValue, RedisClient } from './utils/redis';
+import type { JSONObject, JSONValue, RedisClient } from './utils/redis';
 import { map } from 'bluebird';
 import { getLastMessageId } from './utils/lastMessageId';
 import { mergeDeep } from './utils/mergeDeep';
@@ -237,17 +237,23 @@ export class PubSub<
         this.redis.joinInFlight({
           key: `pubsub:sendLatestOnNew:${triggerName}`,
           timeout: options.sendLatestOnNew.timeout ?? 30_000, // 30s default timeout
-          callback: options.sendLatestOnNew.callback
+          callback: options.sendLatestOnNew.callback,
+          firstRunnerCallback: async (result) => {
+            // prime the channel with the latest message, so that any other subscribers will get it as well
+            const messageId = await this.redis.broadcast(
+              this.config.stream_channel,
+              JSON.stringify({ channel: triggerName, payload: result, silent: true })
+            );
+
+            // yes result is expected to be an object, and Object.assign mutates result
+            Object.assign(result as JSONObject, {
+              extensions: { message_id: messageId }
+            });
+            return result;
+          }
         })
         .then(result => {
-          if (result.wasFirst) {
-            // prime the channel with the latest message, so that any other subscribers will get it as well
-            this.redis.broadcast(
-              this.config.stream_channel,
-              JSON.stringify({ channel: triggerName, payload: result.result, silent: true })
-            );
-          }
-          // also push the latest message to this iterator, so that the subscriber will get it immediately
+          // push the message to this iterator, so that the subscriber will get it immediately
           iterator.pushValue(result.result);
         })
         .catch(err => {
