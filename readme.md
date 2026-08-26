@@ -188,7 +188,7 @@ The basic concept is that a `message_id` is sent with every publish and the clie
 This function takes 3 parameters, first the channel(s) to subscribe to, second the `info` object provided by the graphql resolver, and third an optional `options` parameter the defines how the send on resubscribe works.
 
 Options are:
-- `sendLatestOnNew`: Optional boolean, defaults to `false`. When `true` during the subscribe, if no last id was past up (new subscription) then just immediately send the latest message.
+- `sendLatestOnNew`: Optional boolean | object, defaults to `false`. When `true` during the subscribe, if no last id was past up (new subscription) then just immediately send the latest message.
 - `replayMessages`: Optional boolean, defaults to `false`. When `true` upon re-subscribe, it will replay all messages between the last id passed and the latest one. This good for scenarios where the messages are compounded on each other - like chat messages.
 
 Example:
@@ -207,7 +207,41 @@ const UserResolver = {
 }
 ```
 
+When `sendLatestOnNew` options is an `object` it is meant for priming the channel data so there is always a something new to send. It takes a `callback` and optional `timeout` (default `30s`) and `triggerName` (defaults to first channel to susbscribe to).
+
+The callback uses redis to ensure the same channel only has 1 in-flight priming callback running at a time.
+
+Once the channel has been primed from the callback the next subscriptions won't have to prime and callback won't be fired.
+
+```ts
+const UserResolver = {
+  Subscription: {
+    userUpdated: {
+      subscribe: (_, { user_id }, ctx, info) => {
+        return pubsub.iteratorWithLast('USER_UPDATED:' + user_id, info, {
+          sendLatestOnNew: {
+            // signal is AbortSignal.timeout(theTimeout)
+            callback: (signal) => {
+
+              // query language is NOT real
+              const dbUser = db.query('get user from db user table where user_id = ?', user_id);
+              return { userUpdated: dbUser };
+            },
+            timeout: 60_000,
+            triggerName: 'USER_UPDATED:' + user_id
+          },
+          replayMessages: true,
+        });
+      }
+    }
+  }
+}
+```
+
 ### primeChannelData
+
+> [!WARNING]
+> **DEPRECATED**: The `primeChannelData` feature has been deprecated in favor of adding the ability to the `iteratorWithLast` options - which allows quicker subscription establishment.
 
 This function help to prime a trigger/channel with data.  It takes 2 parameters, the channel and an initializer function to get the data. Only if there is not data already on the channel is the initializer called and then silently - without publishing to _everyone_ puts data onto the channel (because likely no-one has been listening to the channel).
 
