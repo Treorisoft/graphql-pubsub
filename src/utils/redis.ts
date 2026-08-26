@@ -1,4 +1,4 @@
-import { Redis, RedisOptions } from 'ioredis';
+import { Redis, RedisOptions, RedisKey, RedisValue } from 'ioredis';
 import { map } from 'bluebird';
 import { RedisClientOptions } from '../types';
 import { randomUUID } from 'node:crypto';
@@ -14,6 +14,29 @@ interface StreamListener<T = unknown> {
 }
 
 const QUERY_CACHE: Map<string, Promise<string | null>> = new Map();
+
+declare module "ioredis" {
+  interface Redis {
+    del_if(key: RedisKey, value: RedisValue): Promise<number>
+  }
+}
+
+function createRedisClient(options: RedisOptions): Redis {
+  const client = new Redis(options);
+
+  client.defineCommand('del_if', {
+    numberOfKeys: 1,
+    lua: `local mutexId = redis.call('GET', KEYS[1]);
+      if mutexId == ARGV[1] then
+        return redis.call('DEL', KEYS[1]);
+      else
+        return 0;
+      end
+    `,
+  });
+
+  return client;
+}
 
 export class RedisClient {
   private config: RedisClientOptions;
@@ -40,16 +63,20 @@ export class RedisClient {
   
   get stream(): Redis {
     if (!this.clients.stream) {
-      this.clients.stream = new Redis(this.options);
+      this.clients.stream = createRedisClient(this.options);
     }
     return this.clients.stream;
   }
 
   get publisher(): Redis {
     if (!this.clients.publisher) {
-      this.clients.publisher = new Redis(this.options);
+      this.clients.publisher = createRedisClient(this.options);
     }
     return this.clients.publisher;
+  }
+
+  async del_if(key: RedisKey, value: RedisValue) {
+    this.publisher.del_if(key, value);
   }
 
   private clearStreamListenerTimeout() {
@@ -280,6 +307,7 @@ export class RedisClient {
           throw err;
         }
         finally {
+          await this.del_if(cacheKey, instanceId); // delete the inflight key if we are the first runner
           await this.publisher.pexpire(streamKey, timeout * 2); // double the timeout for the result stream to ensure that all listeners can get the result
         }
       }
